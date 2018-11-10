@@ -1,5 +1,7 @@
 package com.codeontheweb;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,11 +16,14 @@ import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
 
 @Configuration
 @EnableBatchProcessing
+@PropertySource({"classpath:application.properties", "classpath:private.properties"})
 public class BatchConfiguration
 {
 	private static final Logger logger = LoggerFactory.getLogger(BatchConfiguration.class);
@@ -28,6 +33,12 @@ public class BatchConfiguration
 
 	@Autowired
 	public StepBuilderFactory stepBuilderFactory;
+
+	@Value("${RANDOM_ORG_API_URL}")
+	private String apiURL;
+
+	@Value("${RANDOM_ORG_API_KEY}")
+	private String apiKey;
 
 	@Bean
 	public ListItemReader<RandomData> randomDataReader()
@@ -75,5 +86,13 @@ public class BatchConfiguration
 				.flow(randomDataStep)
 				.end()
 				.build();
+	}
+	
+	private long getDateTimeInt()
+	{
+		LocalDateTime nowTime = LocalDateTime.now();
+		DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+		String formattedNow = nowTime.format(timeFormatter);
+		return Long.parseLong(formattedNow);
 	}
 }
