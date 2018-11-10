@@ -29,4 +29,5 @@ dependencies {
     compile("org.springframework.boot:spring-boot-starter-batch")
     compile("org.hsqldb:hsqldb")//Embedded database
     testCompile("junit:junit")
+    implementation 'com.google.code.gson:gson:2.8.5'
 }
