@@ -180,7 +180,7 @@ public class BatchConfiguration
 		HttpURLConnection httpCon = (HttpURLConnection) urlObj.openConnection();
 		httpCon.setRequestMethod( "POST" );
 		httpCon.setRequestProperty( "User-Agent", "RandomOrgReaderBatch" );
-		httpCon.setRequestProperty("Content-Type", "application/json");
+		httpCon.setRequestProperty( "Content-Type", "application/json" );
 		httpCon.setDoOutput(true);
 
 		OutputStream httpOS = httpCon.getOutputStream();
