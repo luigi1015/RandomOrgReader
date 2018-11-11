@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import javax.annotation.PostConstruct;
 
@@ -83,7 +84,7 @@ public class BatchConfiguration
 		return items -> {
 			for( RandomData rData : items )
 			{
-				logger.info("Writing random data: {}", rData.getRandomData());
+				logger.info("Writing random data: {} type: {}", rData.getRandomData(), rData.getEncoding());
 			}
 		};
 	}
@@ -141,18 +142,20 @@ public class BatchConfiguration
 	
 	private List<RandomData> getRandomData( Long bitsLeft, Long requestsLeft ) throws IOException
 	{
-		Long blobSize = 32L;
+		Long blobSize = 32L;//Size of a blob (in bits) to get from Random.org
+		Long intSize = 10L;//Size of an integer (in bits) to get from Random.org
+		Long advisoryDelay = 0L;//Per Random.org, the number of milliseconds to delay before issuing another request to Random.org
 		List<RandomData> randomDataList = new ArrayList<>();
 		if( requestsLeft > 0 && bitsLeft >= blobSize )
 		{
 			RequestJson requestJson = new RequestJson();
 			
-			//Set up the object for the creation of the JSON
+			//Set up the requestJson object for getting blobs
 			requestJson.setId( batchId );
 			requestJson.setJsonrpc("2.0");
 			requestJson.setMethod("generateBlobs");
 			requestJson.addToParams("apiKey", apiKey);
-			requestJson.addToParams("n", bitsLeft/blobSize/1000);//TODO: Once the code is ready for production, take out the /1000 (which is only for testing)
+			requestJson.addToParams("n", bitsLeft/2/blobSize/1000);//TODO: Once the code is ready for production, take out the /1000 (which is only for testing)
 			requestJson.addToParams("size", blobSize);
 			requestJson.addToParams("format", "base64");
 			
@@ -168,9 +171,57 @@ public class BatchConfiguration
 			JsonArray jsonRandomDataArray = jsonRandomObject.getAsJsonArray("data");
 			jsonRandomDataArray.forEach( item -> {
 				JsonPrimitive jsonRandomDataPrimitive = (JsonPrimitive) item;
-				randomDataList.add( new RandomData(jsonRandomDataPrimitive.getAsString()) );
+				randomDataList.add( new RandomData(jsonRandomDataPrimitive.getAsString(), RandomData.BASE64) );
+			});
+
+			//Get the bits and requests left for the integers request
+			bitsLeft = jsonResultObject.get("bitsLeft").getAsLong();
+			requestsLeft = jsonResultObject.get("requestsLeft").getAsLong();
+			advisoryDelay = jsonResultObject.get("advisoryDelay").getAsLong();
+			logger.info( "Bits left: {}", bitsLeft );
+			logger.info( "Requests left: {}", requestsLeft );
+		}
+
+		try
+		{
+			TimeUnit.MILLISECONDS.sleep(advisoryDelay);
+		} catch( InterruptedException ie )
+		{
+			logger.error("Error sleeping for the requested number of milliseconds from Random.org.", ie);
+		}
+
+		if( requestsLeft > 0 && bitsLeft >= intSize )
+		{
+			RequestJson requestJson = new RequestJson();
+			
+			//Set up the requestJson object for getting blobs
+			requestJson.setId( batchId );
+			requestJson.setJsonrpc("2.0");
+			requestJson.setMethod("generateIntegers");
+			requestJson.addToParams("apiKey", apiKey);
+			//TODO: Once the code is ready for production, take out the /1000 below (which is only for testing)
+			requestJson.addToParams("n", bitsLeft/intSize/1000);//The number of integers to get
+			requestJson.addToParams("min", 0);//Minimum integer in the results (inclusive)
+			requestJson.addToParams("max", 1000);//Maximum integer in the results (inclusive)
+			requestJson.addToParams("replacement", true);//Replacement = true means allow duplicate values in the results
+			requestJson.addToParams("base", 10);//Numerical base for the numbers (10 is the default, but 2, 8, and 16 are also allowed)
+			
+			Gson gson = new Gson();
+			String requestBodyString = gson.toJson(requestJson);
+			
+			String reponse = getPostResponse( requestBodyString );
+			logger.info("Response: {}", reponse );
+			JsonParser jsonParser = new JsonParser();
+			JsonObject jsonResponseObject = jsonParser.parse(reponse).getAsJsonObject();
+			JsonObject jsonResultObject = jsonResponseObject.getAsJsonObject("result");
+			JsonObject jsonRandomObject = jsonResultObject.getAsJsonObject("random");
+			JsonArray jsonRandomDataArray = jsonRandomObject.getAsJsonArray("data");
+			jsonRandomDataArray.forEach( item -> {
+				JsonPrimitive jsonRandomDataPrimitive = (JsonPrimitive) item;
+				randomDataList.add( new RandomData(jsonRandomDataPrimitive.getAsString(), RandomData.INTEGER_BASE_10) );
 			});
 		}
+
 		return randomDataList;
 	}
 	
