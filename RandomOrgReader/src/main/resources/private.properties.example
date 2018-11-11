@@ -1,1 +1,8 @@
-RANDOM_ORG_API_KEY=
+RANDOM_ORG_API_KEY=*API_KEY*
+#Change spring.jpa.hibernate.ddl-auto if you want Hibernate to initialize the database.
+spring.jpa.hibernate.ddl-auto=none
+#Change spring.batch.initialize-schema if you want Spring Batch to initialize the database.
+spring.batch.initialize-schema=never
+spring.datasource.url=jdbc:mysql://localhost:3306/*DB_EXAMPLE*
+spring.datasource.username=*USERNAME*
+spring.datasource.password=*PASSWORD*

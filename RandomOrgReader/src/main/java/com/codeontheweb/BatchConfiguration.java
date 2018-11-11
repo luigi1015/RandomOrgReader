@@ -54,6 +54,9 @@ public class BatchConfiguration
 
 	@Value("${RANDOM_ORG_API_KEY}")
 	private String apiKey;
+
+	@Autowired
+	private RandomDataRepository randomDataRepository;
 	
 	long batchId;
 
@@ -80,11 +83,11 @@ public class BatchConfiguration
 	@Bean
 	public ItemWriter<RandomData> randomDataWriter()
 	{
-		//TODO: Write the data to a database
 		return items -> {
 			for( RandomData rData : items )
 			{
-				logger.info("Writing random data: {} type: {}", rData.getRandomData(), rData.getEncoding());
+				logger.info("Saving data {}", rData);
+				randomDataRepository.save( rData );
 			}
 		};
 	}
@@ -146,6 +149,8 @@ public class BatchConfiguration
 		Long intSize = 10L;//Size of an integer (in bits) to get from Random.org
 		Long advisoryDelay = 0L;//Per Random.org, the number of milliseconds to delay before issuing another request to Random.org
 		List<RandomData> randomDataList = new ArrayList<>();
+
+		//Get the Base64 blobs
 		if( requestsLeft > 0 && bitsLeft >= blobSize )
 		{
 			RequestJson requestJson = new RequestJson();
@@ -171,7 +176,7 @@ public class BatchConfiguration
 			JsonArray jsonRandomDataArray = jsonRandomObject.getAsJsonArray("data");
 			jsonRandomDataArray.forEach( item -> {
 				JsonPrimitive jsonRandomDataPrimitive = (JsonPrimitive) item;
-				randomDataList.add( new RandomData(jsonRandomDataPrimitive.getAsString(), RandomData.BASE64) );
+				randomDataList.add( new RandomData(jsonRandomDataPrimitive.getAsString(), RandomData.BASE64, batchId) );
 			});
 
 			//Get the bits and requests left for the integers request
@@ -182,14 +187,17 @@ public class BatchConfiguration
 			logger.info( "Requests left: {}", requestsLeft );
 		}
 
+		//Wait number of milliseconds advised by Random.org
 		try
 		{
+			logger.info("Waiting {} milliseconds as advised by Random.org.", advisoryDelay);
 			TimeUnit.MILLISECONDS.sleep(advisoryDelay);
 		} catch( InterruptedException ie )
 		{
 			logger.error("Error sleeping for the requested number of milliseconds from Random.org.", ie);
 		}
 
+		//Get the integers
 		if( requestsLeft > 0 && bitsLeft >= intSize )
 		{
 			RequestJson requestJson = new RequestJson();
@@ -218,7 +226,7 @@ public class BatchConfiguration
 			JsonArray jsonRandomDataArray = jsonRandomObject.getAsJsonArray("data");
 			jsonRandomDataArray.forEach( item -> {
 				JsonPrimitive jsonRandomDataPrimitive = (JsonPrimitive) item;
-				randomDataList.add( new RandomData(jsonRandomDataPrimitive.getAsString(), RandomData.INTEGER_BASE_10) );
+				randomDataList.add( new RandomData(jsonRandomDataPrimitive.getAsString(), RandomData.INTEGER_BASE_10, batchId) );
 			});
 		}
 

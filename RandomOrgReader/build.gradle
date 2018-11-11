@@ -27,7 +27,9 @@ targetCompatibility = 1.8
 
 dependencies {
     compile("org.springframework.boot:spring-boot-starter-batch")
-    compile("org.hsqldb:hsqldb")//Embedded database
+    //compile("org.hsqldb:hsqldb")//Embedded database
     testCompile("junit:junit")
     implementation 'com.google.code.gson:gson:2.8.5'
+    compile 'org.springframework.boot:spring-boot-starter-data-jpa'
+    compile 'mysql:mysql-connector-java'
 }
