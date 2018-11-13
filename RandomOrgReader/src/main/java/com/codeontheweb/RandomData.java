@@ -26,7 +26,7 @@ public class RandomData
 	//Default encoding types
 	public static final String BASE64 = "Base64";
 	public static final String INTEGER_BASE_10 = "IntegerBase10";
-	public static final String HEX_INTEGER = "HexInteger";
+	public static final String HEX_INTEGER = "HexadecimalInteger";
 
 	public RandomData( String randomData, String encoding, Long batchId )
 	{
