@@ -152,7 +152,7 @@ public class BatchConfiguration
 	
 	private List<RandomData> getRandomData( Long bitsLeft, Long requestsLeft )
 	{
-		Long intSize = 10L;//Size of an integer (in bits) to get from Random.org
+		Long intSize = 8L;//Size of an integer (in bits) to get from Random.org
 		Long advisoryDelay = 0L;//Per Random.org, the number of milliseconds to delay before issuing another request to Random.org
 		Long divisor = 1L;//Number to divide the amount of results by. Change to something high, like 1000, when testing.
 		List<RandomData> randomDataList = new ArrayList<>();
@@ -180,7 +180,7 @@ public class BatchConfiguration
 				requestJson.addToParams("apiKey", apiKey);
 				requestJson.addToParams("n", numInts);//The number of integers to get
 				requestJson.addToParams("min", 0);//Minimum integer in the results (inclusive)
-				requestJson.addToParams("max", 1000);//Maximum integer in the results (inclusive)
+				requestJson.addToParams("max", 255);//Maximum integer in the results (inclusive)
 				requestJson.addToParams("replacement", true);//Replacement = true means allow duplicate values in the results
 				requestJson.addToParams("base", 16);//Numerical base for the numbers (10 is the default, but 2, 8, and 16 are also allowed)
 
@@ -251,12 +251,12 @@ public class BatchConfiguration
 		httpCon.setRequestProperty( "Content-Type", "application/json" );
 		httpCon.setDoOutput(true);
 
-		logger.info("Sending request json {}", requestBody);
+		logger.debug("Sending request json {}", requestBody);
 		OutputStream httpOS = httpCon.getOutputStream();
 		httpOS.write( requestBody.getBytes() );
 
 		int responseCode = httpCon.getResponseCode();
-		logger.info( "Response code: {}", responseCode );
+		logger.debug( "Response code: {}", responseCode );
 		
 		BufferedReader responseBR = new BufferedReader(new InputStreamReader(httpCon.getInputStream()));
 		String responseLine;
