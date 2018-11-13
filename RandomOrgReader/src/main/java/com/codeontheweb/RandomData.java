@@ -21,14 +21,24 @@ public class RandomData
 	private LocalDateTime creationDate;
 	private Long batchId;
 	
+	private static final String HEX_PREFIX = "0x";
+	
 	//Default encoding types
 	public static final String BASE64 = "Base64";
 	public static final String INTEGER_BASE_10 = "IntegerBase10";
+	public static final String HEX_INTEGER = "HexInteger";
 
 	public RandomData( String randomData, String encoding, Long batchId )
 	{
-		this.setRandomData( randomData );
 		this.setEncoding( encoding );
+		if( HEX_INTEGER.equals(encoding) && randomData != null && !randomData.isEmpty() && !randomData.startsWith(HEX_PREFIX) )
+		{
+			this.setRandomData( HEX_PREFIX + randomData );
+		}
+		else
+		{
+			this.setRandomData( randomData );
+		}
 		this.setBatchId( batchId );
 		this.setCreationDate( LocalDateTime.now() );
 	}

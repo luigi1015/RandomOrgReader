@@ -72,9 +72,9 @@ public class BatchConfiguration
 			Long requestsLeft = Long.parseLong(usageData.getResult().get("requestsLeft"));
 			randomDataList = getRandomData( bitsLeft, requestsLeft );
 		}
-		catch( IOException ioe )
+		catch( IOException | RuntimeException ex )
 		{
-			logger.error("Error trying to get the random data.", ioe);
+			logger.error("Error trying to get the random data.", ex);
 		}
 
 		return new ListItemReader<>(randomDataList);
@@ -107,7 +107,7 @@ public class BatchConfiguration
 	{
 		//TODO: Maybe implement a JobCompletionNotificationListener
 		//		See https://spring.io/guides/gs/batch-processing/
-		return jobBuilderFactory.get("randomDataJob")
+		return jobBuilderFactory.get("RandomDataJob")
 				.incrementer(new RunIdIncrementer())
 				.flow(randomDataStep)
 				.end()
@@ -137,6 +137,13 @@ public class BatchConfiguration
 		
 		String reponse = getPostResponse( requestBodyString );
 		UsageResponse usageResponse = gson.fromJson(reponse, UsageResponse.class);
+		if( usageResponse.getError() != null )
+		{
+			//Random.org returned an error.
+			String errorMessage = String.format( "Random.org returned an error when getting usage data: %s", usageResponse.getError() );
+			logger.error( errorMessage );
+			throw new RuntimeException( errorMessage );
+		}
 		logger.info("bitsLeft: {}", Long.parseLong(usageResponse.getResult().get("bitsLeft")) );
 		logger.info("requestsLeft: {}", Long.parseLong(usageResponse.getResult().get("requestsLeft")) );
 		
@@ -145,76 +152,20 @@ public class BatchConfiguration
 	
 	private List<RandomData> getRandomData( Long bitsLeft, Long requestsLeft )
 	{
-		Long blobSize = 32L;//Size of a blob (in bits) to get from Random.org
 		Long intSize = 10L;//Size of an integer (in bits) to get from Random.org
 		Long advisoryDelay = 0L;//Per Random.org, the number of milliseconds to delay before issuing another request to Random.org
 		Long divisor = 1L;//Number to divide the amount of results by. Change to something high, like 1000, when testing.
 		List<RandomData> randomDataList = new ArrayList<>();
 
-		//Get the Base64 blobs
-		if( requestsLeft > 0 && bitsLeft >= blobSize )
-		{
-			RequestJson requestJson = new RequestJson();
-
-			Long numBlobsLeft = bitsLeft/2/blobSize/divisor;
-			while( numBlobsLeft > 0 && requestsLeft > 0)
-			{
-				//Random.org has a max number of blobs it'll return in one request.
-				//Make sure no request is for more than the max.
-				Long maxBlobs = 100L;
-				Long numBlobs = numBlobsLeft <= maxBlobs ? numBlobsLeft : maxBlobs;
-				numBlobsLeft -= numBlobs;
-
-				//Set up the requestJson object for getting blobs
-				requestJson.setId( batchId );
-				requestJson.setJsonrpc("2.0");
-				requestJson.setMethod("generateBlobs");
-				requestJson.addToParams("apiKey", apiKey);
-				requestJson.addToParams("n", numBlobs);
-				requestJson.addToParams("size", blobSize);
-				requestJson.addToParams("format", "base64");
-				
-				Gson gson = new Gson();
-				String requestBodyString = gson.toJson(requestJson);
-
-				try
-				{
-					String reponse = getPostResponse( requestBodyString );
-					logger.info("Response: {}", reponse );
-					JsonParser jsonParser = new JsonParser();
-					JsonObject jsonResponseObject = jsonParser.parse(reponse).getAsJsonObject();
-					JsonObject jsonResultObject = jsonResponseObject.getAsJsonObject("result");
-					JsonObject jsonRandomObject = jsonResultObject.getAsJsonObject("random");
-					JsonArray jsonRandomDataArray = jsonRandomObject.getAsJsonArray("data");
-					jsonRandomDataArray.forEach( item -> {
-						JsonPrimitive jsonRandomDataPrimitive = (JsonPrimitive) item;
-						randomDataList.add( new RandomData(jsonRandomDataPrimitive.getAsString(), RandomData.BASE64, batchId) );
-					});
-		
-					//Get the bits and requests left for the integers request
-					bitsLeft = jsonResultObject.get("bitsLeft").getAsLong();
-					requestsLeft = jsonResultObject.get("requestsLeft").getAsLong();
-					advisoryDelay = jsonResultObject.get("advisoryDelay").getAsLong();
-					logger.info( "Bits left: {}", bitsLeft );
-					logger.info( "Requests left: {}", requestsLeft );
-	
-					//Wait number of milliseconds advised by Random.org
-					waitMills( advisoryDelay );
-				}
-				catch( IOException ioe )
-				{
-					logger.error("Error getting the base64 blobs.", ioe);
-				}
-			}
-		}
-
-		//Get the integers
+		//Get the hex integers
 		if( requestsLeft > 0 && bitsLeft >= intSize )
 		{
 			RequestJson requestJson = new RequestJson();
 
 			Long numIntsLeft = bitsLeft/intSize/divisor;
-			while( numIntsLeft > 0 && requestsLeft > 0 )
+			boolean hasError = false;//Whether encountered an error that should stop the requests to Random.org
+
+			while( numIntsLeft > 0 && requestsLeft > 0 && !hasError )
 			{
 				//Random.org has a max number of integers it'll return in one request.
 				//Make sure no request is for more than the max.
@@ -231,8 +182,8 @@ public class BatchConfiguration
 				requestJson.addToParams("min", 0);//Minimum integer in the results (inclusive)
 				requestJson.addToParams("max", 1000);//Maximum integer in the results (inclusive)
 				requestJson.addToParams("replacement", true);//Replacement = true means allow duplicate values in the results
-				requestJson.addToParams("base", 10);//Numerical base for the numbers (10 is the default, but 2, 8, and 16 are also allowed)
-				
+				requestJson.addToParams("base", 16);//Numerical base for the numbers (10 is the default, but 2, 8, and 16 are also allowed)
+
 				Gson gson = new Gson();
 				String requestBodyString = gson.toJson(requestJson);
 
@@ -242,23 +193,32 @@ public class BatchConfiguration
 					logger.info("Response: {}", reponse );
 					JsonParser jsonParser = new JsonParser();
 					JsonObject jsonResponseObject = jsonParser.parse(reponse).getAsJsonObject();
-					JsonObject jsonResultObject = jsonResponseObject.getAsJsonObject("result");
-					JsonObject jsonRandomObject = jsonResultObject.getAsJsonObject("random");
-					JsonArray jsonRandomDataArray = jsonRandomObject.getAsJsonArray("data");
-					jsonRandomDataArray.forEach( item -> {
-						JsonPrimitive jsonRandomDataPrimitive = (JsonPrimitive) item;
-						randomDataList.add( new RandomData(jsonRandomDataPrimitive.getAsString(), RandomData.INTEGER_BASE_10, batchId) );
-					});
+					if( !jsonResponseObject.has("error") )
+					{
+						JsonObject jsonResultObject = jsonResponseObject.getAsJsonObject("result");
+						JsonObject jsonRandomObject = jsonResultObject.getAsJsonObject("random");
+						JsonArray jsonRandomDataArray = jsonRandomObject.getAsJsonArray("data");
+						jsonRandomDataArray.forEach( item -> {
+							JsonPrimitive jsonRandomDataPrimitive = (JsonPrimitive) item;
+							randomDataList.add( new RandomData(jsonRandomDataPrimitive.getAsString(), RandomData.HEX_INTEGER, batchId) );
+						});
+			
+						//Get the bits and requests left for the integers request
+						bitsLeft = jsonResultObject.get("bitsLeft").getAsLong();
+						requestsLeft = jsonResultObject.get("requestsLeft").getAsLong();
+						advisoryDelay = jsonResultObject.get("advisoryDelay").getAsLong();
+						logger.info( "Bits left: {}", bitsLeft );
+						logger.info( "Requests left: {}", requestsLeft );
 		
-					//Get the bits and requests left for the integers request
-					bitsLeft = jsonResultObject.get("bitsLeft").getAsLong();
-					requestsLeft = jsonResultObject.get("requestsLeft").getAsLong();
-					advisoryDelay = jsonResultObject.get("advisoryDelay").getAsLong();
-					logger.info( "Bits left: {}", bitsLeft );
-					logger.info( "Requests left: {}", requestsLeft );
-	
-					//Wait number of milliseconds advised by Random.org
-					waitMills( advisoryDelay );
+						//Wait number of milliseconds advised by Random.org
+						waitMills( advisoryDelay );
+					}
+					else
+					{
+						//Got an error code from Random.org
+						logger.error( "Got an error response from Random.org: {}", jsonResponseObject.get("error") );
+						hasError = true;
+					}
 				}
 				catch( IOException ioe )
 				{

@@ -2,11 +2,14 @@ package com.codeontheweb;
 
 import java.util.Map;
 
+import com.google.gson.JsonObject;
+
 public class UsageResponse
 {
 	private String jsonrpc;
 	private Long id;
 	private Map<String, String> result;
+	private JsonObject error = null;
 
 	public String getJsonrpc()
 	{
@@ -36,5 +39,15 @@ public class UsageResponse
 	public void setResult(Map<String, String> newResult)
 	{
 		result = newResult;
+	}
+
+	public JsonObject getError()
+	{
+		return error;
+	}
+
+	public void setError(JsonObject newError)
+	{
+		error = newError;
 	}
 }
