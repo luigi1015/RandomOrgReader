@@ -1,3 +1,5 @@
 /.gradle/
 /bin/
 private.properties
+/build/
+/.settings/
